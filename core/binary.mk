@@ -44,33 +44,6 @@ endif
 
 my_soong_problems :=
 
-# Automatically replace the old-style kernel header include with a dependency
-# on the generated_kernel_headers header library when building inline
-ifeq ($(INLINE_KERNEL_BUILDING),true)
-ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_C_INCLUDES)))
-  LOCAL_C_INCLUDES := $(patsubst $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,,$(LOCAL_C_INCLUDES))
-  LOCAL_HEADER_LIBRARIES += generated_kernel_headers
-endif
-
-# Some qcom binaries use this weird -isystem include...
-ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_CFLAGS)))
-  LOCAL_CFLAGS := $(patsubst -isystem $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,,$(LOCAL_CFLAGS))
-  LOCAL_HEADER_LIBRARIES += generated_kernel_headers
-endif
-
-# Remove KERNEL_OBJ/usr from any LOCAL_ADDITIONAL_DEPENDENCIES, we will
-# just include generated_kernel_headers which already has the proper
-# dependency
-ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr,$(LOCAL_ADDITIONAL_DEPENDENCIES)))
-  LOCAL_ADDITIONAL_DEPENDENCIES := $(patsubst $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr,,$(LOCAL_ADDITIONAL_DEPENDENCIES))
-endif
-
-# Replace device_kernel_headers with generated_kernel_headers
-ifneq (,$(findstring device_kernel_headers,$(LOCAL_HEADER_LIBRARIES)))
-  LOCAL_HEADER_LIBRARIES := $(patsubst device_kernel_headers,generated_kernel_headers,$(LOCAL_HEADER_LIBRARIES))
-endif
-endif
-
 # The following LOCAL_ variables will be modified in this file.
 # Because the same LOCAL_ variables may be used to define modules for both 1st arch and 2nd arch,
 # we can't modify them in place.
@@ -506,6 +479,34 @@ endif
 # Extra cflags for projects under external/ directory
 ifneq ($(filter external/%,$(LOCAL_PATH)),)
     my_cflags += $(CLANG_EXTERNAL_CFLAGS)
+endif
+
+# Extra cflags for projects under hardware/ directory.
+# This should match the definition of `thirdPartyDirPrefixExceptions`
+# in build/soong/android/paths.go.
+# Get the second element of LOCAL_PATH
+ifneq ($(filter hardware/%,$(LOCAL_PATH)),)
+  my_subdir := $(word 2,$(subst /,$(space),$(LOCAL_PATH)))
+  must_compile_hardware_subdirs := \
+                  hardware/google/% \
+                  hardware/interfaces/% \
+                  hardware/libhardware/% \
+                  hardware/libhardware_legacy/% \
+                  hardware/ril/%
+  ifeq ($(filter $(must_compile_hardware_subdirs),$(my_subdir)),)
+    my_cflags += $(CLANG_EXTERNAL_CFLAGS)
+  endif
+endif
+
+# Extra cflags for projects under vendor/ directory.
+# This should match the definition of `thirdPartyDirPrefixExceptions`
+# in build/soong/android/paths.go.
+ifneq ($(filter vendor/%,$(LOCAL_PATH)),)
+  my_subdir := $(word 2,$(subst /,$(space),$(LOCAL_PATH)))
+  # Do not add the flags for any subdir that contains the string "google".
+  ifneq ($(findstring google,$(my_subdir)),)
+    my_cflags += $(CLANG_EXTERNAL_CFLAGS)
+  endif
 endif
 
 # arch-specific static libraries go first so that generic ones can depend on them
@@ -1192,6 +1193,17 @@ ifneq ($(filter hwaddress,$(my_sanitize)),)
     $(my_whole_static_libraries),hwasan)
   my_static_libraries := $(call use_soong_sanitized_static_libraries,\
     $(my_static_libraries),hwasan)
+endif
+
+###################################################################
+## When compiling a memtag_stack enabled target, use the .memtag_stack variant
+## of any static dependencies (where they exist).
+##################################################################
+ifneq ($(filter memtag_stack,$(my_sanitize)),)
+  my_whole_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_whole_static_libraries),memtag_stack)
+  my_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_static_libraries),memtag_stack)
 endif
 
 ###################################################################

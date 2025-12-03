@@ -1,1 +1,2 @@
-test_scl.scl
+
+foo = "bar"
