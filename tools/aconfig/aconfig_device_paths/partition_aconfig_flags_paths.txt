@@ -1,0 +1,3 @@
+"/system/etc/aconfig_flags.pb",
+"/product/etc/aconfig_flags.pb",
+"/vendor/etc/aconfig_flags.pb",
